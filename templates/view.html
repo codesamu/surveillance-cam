@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Streams - Surveillance Camera</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .content {
+            padding: 2rem;
+        }
+        
+        .streams-section {
+            margin-bottom: 2rem;
+        }
+        
+        .streams-section h3 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .streams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stream-card {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .stream-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .stream-card h4 {
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .stream-info {
+            color: #666;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .stream-info p {
+            margin-bottom: 0.3rem;
+        }
+        
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .video-container {
+            margin: 2rem 0;
+            text-align: center;
+            display: none;
+        }
+        
+        #remoteVideo {
+            width: 100%;
+            max-width: 800px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .status {
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .no-streams {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        .no-streams h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 2rem;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+        
+        .back-link:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .refresh-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            transition: background 0.3s ease;
+        }
+        
+        .refresh-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Home</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>👁️ View Streams</h1>
+            <p>Watch live camera feeds from other users</p>
+        </div>
+        
+        <div class="content">
+            <div class="streams-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Available Streams</h3>
+                    <button class="refresh-btn" onclick="loadStreams()">🔄 Refresh</button>
+                </div>
+                
+                <div id="streamsGrid" class="streams-grid">
+                    <!-- Streams will be loaded here -->
+                </div>
+                
+                <div id="noStreams" class="no-streams" style="display: none;">
+                    <h3>No Active Streams</h3>
+                    <p>There are currently no active camera streams.</p>
+                    <p>Check back later or start your own stream!</p>
+                </div>
+            </div>
+            
+            <div id="status" class="status" style="display: none;"></div>
+            
+            <div id="videoContainer" class="video-container">
+                <video id="remoteVideo" autoplay playsinline></video>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let currentStreamId;
+        let peerConnection;
+        
+        // Initialize Socket.IO connection
+        function initSocket() {
+            socket = io();
+            
+            socket.on('stream_signal', (data) => {
+                handleStreamSignal(data);
+            });
+            
+            socket.on('stream_ended', (data) => {
+                if (data.stream_id === currentStreamId) {
+                    showStatus('Stream has ended', 'info');
+                    stopWatching();
+                }
+                loadStreams(); // Refresh stream list
+            });
+        }
+        
+        // Load available streams
+        async function loadStreams() {
+            try {
+                const response = await fetch('/api/streams');
+                const streams = await response.json();
+                
+                const streamsGrid = document.getElementById('streamsGrid');
+                const noStreams = document.getElementById('noStreams');
+                
+                if (streams.length === 0) {
+                    streamsGrid.style.display = 'none';
+                    noStreams.style.display = 'block';
+                } else {
+                    streamsGrid.style.display = 'grid';
+                    noStreams.style.display = 'none';
+                    
+                    streamsGrid.innerHTML = streams.map(stream => `
+                        <div class="stream-card">
+                            <h4>${stream.name}</h4>
+                            <div class="stream-info">
+                                <p><strong>Started:</strong> ${new Date(stream.started_at).toLocaleString()}</p>
+                                <p><strong>Viewers:</strong> ${stream.viewers}</p>
+                            </div>
+                            <button class="btn btn-primary" onclick="watchStream('${stream.id}')">
+                                👁️ Watch Stream
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading streams:', error);
+                showStatus('Failed to load streams', 'error');
+            }
+        }
+        
+        // Watch a specific stream
+        async function watchStream(streamId) {
+            try {
+                // Join the stream
+                const response = await fetch('/api/join_stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        stream_id: streamId
+                    })
+                });
+                
+                if (response.ok) {
+                    currentStreamId = streamId;
+                    showStatus('Connecting to stream...', 'info');
+                    
+                    // Join stream room
+                    socket.emit('join_stream', { stream_id: streamId });
+                    
+                    // Initialize WebRTC
+                    initWebRTC();
+                    
+                    // Show video container
+                    document.getElementById('videoContainer').style.display = 'block';
+                    
+                    // Scroll to video
+                    document.getElementById('videoContainer').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    const result = await response.json();
+                    showStatus(result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error joining stream:', error);
+                showStatus('Failed to join stream', 'error');
+            }
+        }
+        
+        // Initialize WebRTC for viewing
+        function initWebRTC() {
+            // Create peer connection
+            peerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            });
+            
+            // Handle incoming stream
+            peerConnection.ontrack = (event) => {
+                const remoteVideo = document.getElementById('remoteVideo');
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    showStatus('Connected to stream!', 'success');
+                }
+            };
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('viewer_signal', {
+                        stream_id: currentStreamId,
+                        signal: {
+                            type: 'ice-candidate',
+                            candidate: event.candidate
+                        }
+                    });
+                }
+            };
+            
+            // Handle connection state changes
+            peerConnection.onconnectionstatechange = () => {
+                if (peerConnection.connectionState === 'connected') {
+                    showStatus('Stream connected successfully!', 'success');
+                } else if (peerConnection.connectionState === 'failed') {
+                    showStatus('Connection failed', 'error');
+                }
+            };
+        }
+        
+        // Handle stream signals
+        function handleStreamSignal(data) {
+            if (!peerConnection) return;
+            
+            if (data.signal.type === 'offer') {
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
+                    .then(() => peerConnection.createAnswer())
+                    .then(answer => peerConnection.setLocalDescription(answer))
+                    .then(() => {
+                        socket.emit('viewer_signal', {
+                            stream_id: currentStreamId,
+                            signal: {
+                                type: 'answer',
+                                answer: peerConnection.localDescription
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error handling offer:', error);
+                        showStatus('Failed to connect to stream', 'error');
+                    });
+            } else if (data.signal.type === 'ice-candidate') {
+                peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
+                    .catch(error => {
+                        console.error('Error adding ICE candidate:', error);
+                    });
+            }
+        }
+        
+        // Stop watching current stream
+        function stopWatching() {
+            if (currentStreamId) {
+                socket.emit('leave_stream', { stream_id: currentStreamId });
+                currentStreamId = null;
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            document.getElementById('videoContainer').style.display = 'none';
+            document.getElementById('remoteVideo').srcObject = null;
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Check if device is mobile
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            loadStreams();
+            
+            // Mobile-specific adjustments
+            if (isMobile()) {
+                showStatus('Mobile device detected. Video streaming optimized for mobile.', 'info');
+                
+                // Adjust video container for mobile
+                const videoContainer = document.getElementById('videoContainer');
+                videoContainer.style.padding = '1rem';
+                
+                // Make video responsive on mobile
+                const videoElement = document.getElementById('remoteVideo');
+                videoElement.style.width = '100%';
+                videoElement.style.height = 'auto';
+            }
+        });
+        
+        // Refresh streams periodically
+        setInterval(loadStreams, 30000); // Refresh every 30 seconds
+    </script>
+</body>
+</html> 

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Start Streaming - Surveillance Camera</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .content {
+            padding: 2rem;
+        }
+        
+        .setup-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            background: #f8f9fa;
+        }
+        
+        .setup-section h3 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .video-container {
+            margin: 2rem 0;
+            text-align: center;
+        }
+        
+        #localVideo {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .status {
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .stream-info {
+            background: #e9ecef;
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+        }
+        
+        .stream-info h4 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 2rem;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+        
+        .back-link:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Home</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>📹 Start Streaming</h1>
+            <p>Share your camera feed securely with password protection</p>
+        </div>
+        
+        <div class="content">
+            <div class="setup-section">
+                <h3>Stream Setup</h3>
+                <div class="form-group">
+                    <label for="streamName">Stream Name:</label>
+                    <input type="text" id="streamName" placeholder="Enter stream name" value="My Camera Stream">
+                </div>
+                <div class="form-group">
+                    <label for="streamPassword">Password:</label>
+                    <input type="password" id="streamPassword" placeholder="Enter password to protect your stream">
+                </div>
+                <button id="startStreamBtn" class="btn btn-primary">Start Streaming</button>
+                <button id="stopStreamBtn" class="btn btn-danger" style="display: none;">Stop Streaming</button>
+            </div>
+            
+            <div id="status" class="status" style="display: none;"></div>
+            
+            <div id="streamInfo" class="stream-info" style="display: none;">
+                <h4>Stream Information</h4>
+                <p><strong>Stream ID:</strong> <span id="streamId"></span></p>
+                <p><strong>Status:</strong> <span id="streamStatus">Active</span></p>
+                <p><strong>Viewers:</strong> <span id="viewerCount">0</span></p>
+            </div>
+            
+            <div class="video-container">
+                <video id="localVideo" autoplay muted playsinline></video>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let localStream;
+        let streamId;
+        let peerConnections = {};
+        
+        // Initialize Socket.IO connection
+        function initSocket() {
+            socket = io();
+            
+            socket.on('viewer_joined', (data) => {
+                updateViewerCount(data.viewers);
+            });
+            
+            socket.on('viewer_left', (data) => {
+                updateViewerCount(data.viewers);
+            });
+            
+            socket.on('viewer_signal', (data) => {
+                handleViewerSignal(data);
+            });
+        }
+        
+        // Check if getUserMedia is supported
+        function checkMediaSupport() {
+            if (!navigator.mediaDevices) {
+                // Fallback for older browsers
+                navigator.mediaDevices = {};
+            }
+            
+            if (!navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia = function(constraints) {
+                    const getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                    
+                    if (!getUserMedia) {
+                        return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+                    }
+                    
+                    return new Promise(function(resolve, reject) {
+                        getUserMedia.call(navigator, constraints, resolve, reject);
+                    });
+                }
+            }
+            
+            return true;
+        }
+        
+        // Start streaming
+        async function startStream() {
+            const streamName = document.getElementById('streamName').value;
+            const password = document.getElementById('streamPassword').value;
+            
+            if (!password) {
+                showStatus('Please enter a password', 'error');
+                return;
+            }
+            
+            // Check media support first
+            if (!checkMediaSupport()) {
+                showStatus('Camera access not supported in this browser. Please use a modern browser.', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Requesting camera access...', 'info');
+                
+                // Get camera access with better error handling
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'environment' // Use back camera on mobile
+                    },
+                    audio: false
+                });
+                
+                document.getElementById('localVideo').srcObject = localStream;
+                showStatus('Camera access granted!', 'success');
+                
+                // Start stream on server
+                const response = await fetch('/api/start_stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        stream_name: streamName,
+                        password: password
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    streamId = result.stream_id;
+                    showStatus('Stream started successfully!', 'success');
+                    showStreamInfo();
+                    updateStreamControls(true);
+                    
+                    // Join stream room
+                    socket.emit('join_stream', { stream_id: streamId });
+                    
+                    // Initialize WebRTC
+                    initWebRTC();
+                } else {
+                    showStatus(result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error starting stream:', error);
+                
+                // Better error messages for mobile
+                let errorMessage = 'Failed to start stream';
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Camera access denied. Please allow camera permissions and try again.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'No camera found on this device.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = 'Camera not supported on this device/browser.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'Camera is already in use by another application.';
+                } else if (error.message) {
+                    errorMessage += ': ' + error.message;
+                }
+                
+                showStatus(errorMessage, 'error');
+            }
+        }
+        
+        // Stop streaming
+        async function stopStream() {
+            if (!streamId) return;
+            
+            try {
+                const response = await fetch('/api/stop_stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        stream_id: streamId,
+                        password: document.getElementById('streamPassword').value
+                    })
+                });
+                
+                if (response.ok) {
+                    showStatus('Stream stopped successfully', 'success');
+                    hideStreamInfo();
+                    updateStreamControls(false);
+                    
+                    // Stop local stream
+                    if (localStream) {
+                        localStream.getTracks().forEach(track => track.stop());
+                        document.getElementById('localVideo').srcObject = null;
+                    }
+                    
+                    // Close peer connections
+                    Object.values(peerConnections).forEach(pc => pc.close());
+                    peerConnections = {};
+                    
+                    streamId = null;
+                }
+            } catch (error) {
+                console.error('Error stopping stream:', error);
+                showStatus('Failed to stop stream', 'error');
+            }
+        }
+        
+        // Initialize WebRTC
+        function initWebRTC() {
+            // WebRTC configuration
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            };
+            
+            // Handle new viewer connections
+            socket.on('viewer_joined', (data) => {
+                createPeerConnection(data.viewerId);
+            });
+        }
+        
+        // Create peer connection for a viewer
+        function createPeerConnection(viewerId) {
+            const pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            });
+            
+            peerConnections[viewerId] = pc;
+            
+            // Add local stream
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+            
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('stream_signal', {
+                        stream_id: streamId,
+                        signal: {
+                            type: 'ice-candidate',
+                            candidate: event.candidate,
+                            viewerId: viewerId
+                        }
+                    });
+                }
+            };
+            
+            // Create offer
+            pc.createOffer()
+                .then(offer => pc.setLocalDescription(offer))
+                .then(() => {
+                    socket.emit('stream_signal', {
+                        stream_id: streamId,
+                        signal: {
+                            type: 'offer',
+                            offer: pc.localDescription,
+                            viewerId: viewerId
+                        }
+                    });
+                });
+        }
+        
+        // Handle viewer signals
+        function handleViewerSignal(data) {
+            const pc = peerConnections[data.viewerId];
+            if (!pc) return;
+            
+            if (data.signal.type === 'answer') {
+                pc.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
+            } else if (data.signal.type === 'ice-candidate') {
+                pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+            }
+        }
+        
+        // Update viewer count
+        function updateViewerCount(count) {
+            document.getElementById('viewerCount').textContent = count;
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Show stream info
+        function showStreamInfo() {
+            document.getElementById('streamId').textContent = streamId;
+            document.getElementById('streamInfo').style.display = 'block';
+        }
+        
+        // Hide stream info
+        function hideStreamInfo() {
+            document.getElementById('streamInfo').style.display = 'none';
+        }
+        
+        // Update stream controls
+        function updateStreamControls(isStreaming) {
+            document.getElementById('startStreamBtn').style.display = isStreaming ? 'none' : 'inline-block';
+            document.getElementById('stopStreamBtn').style.display = isStreaming ? 'inline-block' : 'none';
+        }
+        
+        // Event listeners
+        document.getElementById('startStreamBtn').addEventListener('click', startStream);
+        document.getElementById('stopStreamBtn').addEventListener('click', stopStream);
+        
+        // Check if device is mobile
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            
+            // Show mobile-specific instructions
+            if (isMobile()) {
+                showStatus('Mobile device detected. Make sure to allow camera permissions when prompted.', 'info');
+                
+                // Add mobile-specific UI adjustments
+                const videoElement = document.getElementById('localVideo');
+                videoElement.style.maxWidth = '100%';
+                videoElement.style.height = 'auto';
+            }
+            
+            // Check media support on load
+            if (!checkMediaSupport()) {
+                showStatus('Warning: Camera access may not be supported in this browser. Try using Chrome, Firefox, or Safari.', 'error');
+            }
+        });
+    </script>
+</body>
+</html> 
