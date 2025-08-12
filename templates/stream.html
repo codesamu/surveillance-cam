@@ -362,6 +362,7 @@
                     
                     // Register streamer in room for directed signaling
                     socket.emit('register_streamer', { stream_id: streamId });
+                    bindViewerSignalHandler();
                     
                     // Initialize WebRTC
                     initWebRTC();
@@ -487,22 +488,23 @@
         }
         
         // Handle viewer signals
-        function handleViewerSignal(data) {
-            const pc = peerConnections[data.viewerId];
+        function handleViewerSignal(signal) {
+            const pc = peerConnections[signal.viewerId];
             if (!pc) return;
             
-            if (data.signal.type === 'answer') {
-                pc.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
-            } else if (data.signal.type === 'ice-candidate') {
-                pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+            if (signal.type === 'answer') {
+                pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+            } else if (signal.type === 'ice-candidate') {
+                pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
             }
         }
 
         // Receive directed viewer signals
-        if (!socket) { initSocket(); }
-        else {
+        function bindViewerSignalHandler() {
+            socket.off && socket.off('viewer_signal');
             socket.on('viewer_signal', (data) => handleViewerSignal(data));
         }
+        
         
         // Update viewer count
         function updateViewerCount(count) {

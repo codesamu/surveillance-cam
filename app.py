@@ -200,4 +200,11 @@ def on_viewer_signal_routed(data):
         emit('viewer_signal', signal_data, room=stream_id, include_self=False)
 
 if __name__ == '__main__':
+    # Prefer eventlet if available for better websockets
+    try:
+        import eventlet
+        import eventlet.wsgi  # noqa: F401
+        async_mode = 'eventlet'
+    except Exception:
+        async_mode = 'threading'
     socketio.run(app, host='0.0.0.0', port=5002, debug=True) 

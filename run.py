@@ -70,7 +70,7 @@ def main():
         socketio.run(
             app, 
             host='0.0.0.0', 
-            port=5000, 
+            port=5002, 
             debug=False,  # Set to False for production
             allow_unsafe_werkzeug=True
         )
