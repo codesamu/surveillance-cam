@@ -237,6 +237,10 @@
             
             socket.on('viewer_joined', (data) => {
                 updateViewerCount(data.viewers);
+                // Create a peer connection for this viewer
+                if (data.viewerId) {
+                    createPeerConnection(data.viewerId);
+                }
             });
             
             socket.on('viewer_left', (data) => {
@@ -248,24 +252,56 @@
             });
         }
         
-        // Check if getUserMedia is supported
+        // Check if getUserMedia is supported with aggressive fallbacks
         function checkMediaSupport() {
+            // Create mediaDevices if it doesn't exist
             if (!navigator.mediaDevices) {
-                // Fallback for older browsers
                 navigator.mediaDevices = {};
             }
             
+            // Try multiple fallback methods
             if (!navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia = function(constraints) {
-                    const getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-                    
-                    if (!getUserMedia) {
-                        return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+                // Method 1: Try vendor-prefixed versions
+                const getUserMedia = navigator.webkitGetUserMedia || 
+                                   navigator.mozGetUserMedia || 
+                                   navigator.msGetUserMedia ||
+                                   navigator.oGetUserMedia;
+                
+                if (getUserMedia) {
+                    navigator.mediaDevices.getUserMedia = function(constraints) {
+                        return new Promise(function(resolve, reject) {
+                            getUserMedia.call(navigator, constraints, resolve, reject);
+                        });
                     }
-                    
-                    return new Promise(function(resolve, reject) {
-                        getUserMedia.call(navigator, constraints, resolve, reject);
-                    });
+                } else {
+                    // Method 2: Try legacy getUserMedia on navigator
+                    if (navigator.getUserMedia) {
+                        navigator.mediaDevices.getUserMedia = function(constraints) {
+                            return new Promise(function(resolve, reject) {
+                                navigator.getUserMedia(constraints, resolve, reject);
+                            });
+                        }
+                    } else {
+                        // Method 3: Try legacy getUserMedia on window
+                        if (window.getUserMedia) {
+                            navigator.mediaDevices.getUserMedia = function(constraints) {
+                                return new Promise(function(resolve, reject) {
+                                    window.getUserMedia(constraints, resolve, reject);
+                                });
+                            }
+                        } else {
+                            // Method 4: Try legacy getUserMedia on document
+                            if (document.getUserMedia) {
+                                navigator.mediaDevices.getUserMedia = function(constraints) {
+                                    return new Promise(function(resolve, reject) {
+                                        document.getUserMedia(constraints, resolve, reject);
+                                    });
+                                }
+                            } else {
+                                return false; // No fallback available
+                            }
+                        }
+                    }
                 }
             }
             
@@ -324,8 +360,8 @@
                     showStreamInfo();
                     updateStreamControls(true);
                     
-                    // Join stream room
-                    socket.emit('join_stream', { stream_id: streamId });
+                    // Register streamer in room for directed signaling
+                    socket.emit('register_streamer', { stream_id: streamId });
                     
                     // Initialize WebRTC
                     initWebRTC();
@@ -394,17 +430,7 @@
         
         // Initialize WebRTC
         function initWebRTC() {
-            // WebRTC configuration
-            const config = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]
-            };
-            
-            // Handle new viewer connections
-            socket.on('viewer_joined', (data) => {
-                createPeerConnection(data.viewerId);
-            });
+            // No-op here; we create peer connections on viewer_joined per viewer
         }
         
         // Create peer connection for a viewer
@@ -435,6 +461,15 @@
                     });
                 }
             };
+
+            // Handle connection state
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') {
+                    showStatus(`Viewer ${viewerId} connected`, 'success');
+                } else if (pc.connectionState === 'failed') {
+                    showStatus(`Viewer ${viewerId} connection failed`, 'error');
+                }
+            };
             
             // Create offer
             pc.createOffer()
@@ -461,6 +496,12 @@
             } else if (data.signal.type === 'ice-candidate') {
                 pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
             }
+        }
+
+        // Receive directed viewer signals
+        if (!socket) { initSocket(); }
+        else {
+            socket.on('viewer_signal', (data) => handleViewerSignal(data));
         }
         
         // Update viewer count
@@ -501,9 +542,67 @@
         document.getElementById('startStreamBtn').addEventListener('click', startStream);
         document.getElementById('stopStreamBtn').addEventListener('click', stopStream);
         
-        // Check if device is mobile
+        // Check if device is mobile and detect browser
         function isMobile() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+        
+        function detectBrowser() {
+            const userAgent = navigator.userAgent;
+            
+            // Check for privacy browsers first
+            if (userAgent.includes('Arc')) {
+                return 'Arc';
+            } else if (userAgent.includes('Zen') || userAgent.includes('zen')) {
+                return 'Zen';
+            } else if (userAgent.includes('Brave')) {
+                return 'Brave';
+            } else if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
+                return 'Chrome';
+            } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+                return 'Safari';
+            } else if (userAgent.includes('Firefox')) {
+                return 'Firefox';
+            } else if (userAgent.includes('Edge')) {
+                return 'Edge';
+            } else if (userAgent.includes('SamsungBrowser')) {
+                return 'Samsung Internet';
+            } else if (userAgent.includes('Opera')) {
+                return 'Opera';
+            } else {
+                return 'Unknown';
+            }
+        }
+        
+        function getMobileInstructions() {
+            const browser = detectBrowser();
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            
+            if (browser === 'Arc') {
+                if (isIOS) {
+                    return 'Arc on iOS has limited camera support. Please use Safari for streaming, or check Arc settings for camera permissions.';
+                } else {
+                    return 'Arc browser may block camera access. Check privacy settings or try Chrome/Firefox.';
+                }
+            } else if (browser === 'Zen') {
+                return 'Zen browser is privacy-focused and may block camera access. Try Chrome, Firefox, or Safari for streaming.';
+            } else if (browser === 'Brave') {
+                return 'Brave may block camera access. Check shield settings and allow camera permissions.';
+            } else if (isIOS) {
+                if (browser === 'Safari') {
+                    return 'On iOS Safari: Make sure you\'re using HTTPS or localhost, and allow camera permissions when prompted.';
+                } else {
+                    return 'On iOS: Camera access only works in Safari. Please use Safari browser for streaming.';
+                }
+            } else if (browser === 'Chrome') {
+                return 'On Android Chrome: Make sure to allow camera permissions and try refreshing the page if needed.';
+            } else if (browser === 'Samsung Internet') {
+                return 'On Samsung Internet: Try updating your browser or use Chrome for better compatibility.';
+            } else if (browser === 'Firefox') {
+                return 'On Firefox Mobile: Camera access should work, but Chrome may be more reliable.';
+            } else {
+                return 'Try using Chrome, Firefox, or Safari for better camera compatibility.';
+            }
         }
         
         // Initialize when page loads
@@ -512,7 +611,8 @@
             
             // Show mobile-specific instructions
             if (isMobile()) {
-                showStatus('Mobile device detected. Make sure to allow camera permissions when prompted.', 'info');
+                const instructions = getMobileInstructions();
+                showStatus(`Mobile device detected (${detectBrowser()}). ${instructions}`, 'info');
                 
                 // Add mobile-specific UI adjustments
                 const videoElement = document.getElementById('localVideo');
@@ -522,7 +622,13 @@
             
             // Check media support on load
             if (!checkMediaSupport()) {
-                showStatus('Warning: Camera access may not be supported in this browser. Try using Chrome, Firefox, or Safari.', 'error');
+                if (isMobile()) {
+                    const browser = detectBrowser();
+                    const instructions = getMobileInstructions();
+                    showStatus(`Camera access not supported in ${browser}. ${instructions}`, 'error');
+                } else {
+                    showStatus('Warning: Camera access may not be supported in this browser. Try using Chrome, Firefox, or Safari.', 'error');
+                }
             }
         });
     </script>

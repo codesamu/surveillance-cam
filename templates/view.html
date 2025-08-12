@@ -291,38 +291,47 @@
         }
         
         // Watch a specific stream
+        async function promptPassword(streamId) {
+            return new Promise((resolve) => {
+                const password = prompt('Enter stream password:');
+                resolve(password || '');
+            });
+        }
+
         async function watchStream(streamId) {
             try {
-                // Join the stream
-                const response = await fetch('/api/join_stream', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        stream_id: streamId
-                    })
-                });
-                
-                if (response.ok) {
-                    currentStreamId = streamId;
-                    showStatus('Connecting to stream...', 'info');
-                    
-                    // Join stream room
-                    socket.emit('join_stream', { stream_id: streamId });
-                    
-                    // Initialize WebRTC
-                    initWebRTC();
-                    
-                    // Show video container
-                    document.getElementById('videoContainer').style.display = 'block';
-                    
-                    // Scroll to video
-                    document.getElementById('videoContainer').scrollIntoView({ behavior: 'smooth' });
-                } else {
-                    const result = await response.json();
-                    showStatus(result.error, 'error');
+                // Ask for password
+                const password = await promptPassword(streamId);
+                if (!password) {
+                    showStatus('Password is required to view this stream.', 'error');
+                    return;
                 }
+
+                // Authorize with backend
+                const authResp = await fetch('/api/authorize_view', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stream_id: streamId, password })
+                });
+                const auth = await authResp.json();
+                if (!authResp.ok) {
+                    showStatus(auth.error || 'Invalid password', 'error');
+                    return;
+                }
+
+                currentStreamId = streamId;
+                showStatus('Connecting to stream...', 'info');
+
+                // Initialize WebRTC
+                initWebRTC();
+
+                // Register viewer with unique ID for directed signaling
+                const viewerId = Math.random().toString(36).slice(2);
+                socket.emit('register_viewer', { stream_id: streamId, viewer_id: viewerId });
+
+                // Show video container
+                document.getElementById('videoContainer').style.display = 'block';
+                document.getElementById('videoContainer').scrollIntoView({ behavior: 'smooth' });
             } catch (error) {
                 console.error('Error joining stream:', error);
                 showStatus('Failed to join stream', 'error');
@@ -368,6 +377,11 @@
                     showStatus('Connection failed', 'error');
                 }
             };
+
+            // Receive directed offers/ICE from streamer
+            socket.on('stream_signal', (data) => {
+                handleStreamSignal(data);
+            });
         }
         
         // Handle stream signals
